@@ -2,11 +2,13 @@ from model_setup_lines import model_setup_lines as model
 import astropy.constants as const
 import os
 
-dens = 1e8
+sdens = "1e6"
 
-rho0=dens *1.6735575e-24   #reference density cgs units
+dens = float(sdens)
+
+
 prho=4.0 #power law index
-test=model(rho0,prho,size=5000,nphot=100000,radius=5000)
+test=model(dens,prho,size=10000,nphot=100000,radius=5000)
 #test.add_gaussian_variations(1.0)
 
 #write input file
@@ -19,10 +21,10 @@ test.make_vtk()
 
 test.make_cube(ncores=20)
 
-fitsfile = f'{dens}.fits'
+fitsfile = f'{sdens}.fits'
 test.make_fits(fitsfile)
 
-cmd = f'mkdir {dens}; cp *.inp *.fits *.dat *.out *.fit *vtk {dens}'
+cmd = f'mkdir {sdens}; cp *.inp *.fits *.dat *.out *.fits *vtk {sdens}'
 
 os.system(cmd)
 
