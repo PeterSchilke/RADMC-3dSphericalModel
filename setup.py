@@ -1,7 +1,10 @@
 from model_setup_lines import model_setup_lines as model
 import astropy.constants as const
+import os
 
-rho0=1e6 *1.6735575e-24   #reference density cgs units
+dens = 1e8
+
+rho0=dens *1.6735575e-24   #reference density cgs units
 prho=4.0 #power law index
 test=model(rho0,prho,size=5000,nphot=100000,radius=5000)
 #test.add_gaussian_variations(1.0)
@@ -16,7 +19,13 @@ test.make_vtk()
 
 test.make_cube(ncores=20)
 
-test.make_fits('1e6')
+fitsfile = f'{dens}.fits'
+test.make_fits(fitsfile)
+
+cmd = f'mkdir {dens}; cp *.inp *.fits *.dat *.out *.fit *vtk {dens}'
+
+os.system(cmd)
+
 # write code to read a file
 
 #sed
