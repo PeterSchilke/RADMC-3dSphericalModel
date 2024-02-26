@@ -27,7 +27,7 @@ import sys
 '''3D model with spherical coordinates'''
 
 class model_setup_lines:
-    def __init__(self,rho0,prho,size=5000,nphot=100000,radius=3000):
+    def __init__(self,dens,prho,size=5000,nphot=100000,radius=3000):
 
         au=(const.au).to("cm").value
 
@@ -74,11 +74,13 @@ class model_setup_lines:
         self.thetai   = np.linspace(0, np.pi,self.ntheta+1)
         self.phii     = np.linspace(0, 2*np.pi,self.nphi+1)
         rc       = 0.5e0 * ( self.ri[:-1] + self.ri[1:] )
+        rdiff = np.diff(self.ri)
         rtheta       = 0.5e0 * ( self.thetai[:-1] + self.thetai[1:] )
         rphi       = 0.5e0 * ( self.phii[:-1] + self.phii[1:] )
 
-        self.rho0 = rho0
+        self.rho0 = dens * 2.3 * mp
         self.prho     = prho   
+
 
         #
         # Make the dust density model
@@ -86,11 +88,14 @@ class model_setup_lines:
         self.radius = radius * au
         rr, tt, pp      = np.meshgrid(rc, rtheta, rphi,indexing='ij')
         self.rhod     = self.rho0 /(1.+rr**2/self.radius**2)**(self.prho/2)
-#        print (self.rhod.shape, rr.shape)
+        densr = dens/(1.+rc**2/self.radius**2)**(self.prho/2)
+        print (self.rhod.shape, rr.shape)
 #        for i in range(rr.shape[0]):
 #            print (self.rhod[i], rr[i])
        #
         # Make the dust density model in the layer
+        cold = rdiff*densr
+        print (f'total column density {cold.sum(): 5.2e}')
    
     def add_gaussian_variations(self, std_deviation):
         # Generate Gaussian variations for each voxel
