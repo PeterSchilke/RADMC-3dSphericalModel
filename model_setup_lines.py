@@ -27,23 +27,31 @@ import sys
 '''3D model with spherical coordinates'''
 
 class model_setup_lines:
-    def __init__(self,dens,prho,size=5000,nphot=100000,radius=3000):
+    def __init__(self,dens,prho,ri=50,ro=5000,nphot=100000,radius=3000,nradial=100,lum=1e4):
 
         au=(const.au).to("cm").value
 
         self.nphot=nphot
 
-        self.sizer = size *au
+        self.ri = ri * au
+        self.ro = ro * au
  
+        sigma = const.sigma_sb.value
+        Lsun = const.L_sun.value
+        Rsun = const.R_sun.value
         #
         # Star parameters
         #
+        radius_star = 13.4
         self.mstar    = 30*(const.M_sun).to("g").value # in kg, check if correct units
-        self.rstar    = 13.4*(const.R_sun).to("cm").value  # in m , check units
-        self.tstar    = 30000 #in K 
+        self.rstar    = radius_star*(const.R_sun).to("cm").value  # in m , check units
+        self.tstar    = (lum*Lsun/(4*np.pi*sigma*(radius_star*Rsun)**2))**0.25 
         self.ls       = (const.L_sun).to("erg/s").value  #solar luminosity
         self.pstar    = np.array([0.,0.,0.]) #position in cartesian coords
         #
+        Lum = sigma*4*np.pi*(radius_star*Rsun)**2*self.tstar**4/Lsun 
+
+        print (f'Luminosity: {Lum:5.2e}, Temperature: {self.tstar:5f}' )
         # Wavelengths - this eventually needs a function to calculate it based of start and endpoint and maybe number of intervals.
         #
         lam1     = 0.01e0
@@ -63,14 +71,14 @@ class model_setup_lines:
         self.nlam     = self.lam.size
 
         # grid parameters - eventually replace this with a function or put as argument.
-        self.nr = 100  # 
+        self.nr = nradial  # 
         self.ntheta = 90  # 
         self.nphi = 180  # 
         #
 
         #
   
-        self.ri       = np.logspace(np.log10(0.01*self.sizer),np.log10(self.sizer), self.nr+1)
+        self.ri       = np.logspace(np.log10(self.ri),np.log10(self.ro), self.nr+1)
         self.thetai   = np.linspace(0, np.pi,self.ntheta+1)
         self.phii     = np.linspace(0, 2*np.pi,self.nphi+1)
         rc       = 0.5e0 * ( self.ri[:-1] + self.ri[1:] )
@@ -231,17 +239,22 @@ class model_setup_lines:
         t1 = time.time()
 
         total = t1-t0
-        print("Calculating the model cost: "+str(total)+" s")
+        print(f'Calculating the model cost: {total}')
         with open('cost.out','w+') as f:
-            f.write("Calculating the model cost: "+str(total)+" s\n")
+            f.write(f'Calculating the model cost: {total}')
         #Make the necessary calls to run radmc3d
 
     def make_vtk(self):
         os.system('radmc3d vtk_dust_temperature 1 vtk_dust_density 1')
    
-    def make_cube(self, lambda1 = 1358.0, lambda2=1359.5, nlam=3000, ncores=20):
+    def make_cube(self, lambda1 = 1358.0, lambda2=1359.5, nlam=300, ncores=20):
         cmd = f'radmc3d image lambdarange {lambda1} {lambda2} nlam {nlam} setthreads {ncores}'
         os.system(cmd)
+
+    def make_circular_image(self, wavel=10):
+        cmd = f'radmc3d image circ lambda {wavel}'
+        os.system(cmd)
+    
 
     def make_fits(self, filename):
         im=readImage()
