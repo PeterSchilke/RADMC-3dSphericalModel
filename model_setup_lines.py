@@ -6,6 +6,7 @@ import astropy.units as u
 import numpy as np
 import math
 import os
+import subprocess
 import matplotlib.pyplot as plt
 import time
 import matplotlib.pylab as plb
@@ -16,9 +17,9 @@ from spectral_cube import Projection
 import radio_beam
 from radio_beam import Beam
 from astropy.io import fits
-from radmc3dPy.image import *    
-from radmc3dPy.analyze import *  
-from radmc3dPy.natconst import * 
+from radmc3dPy import image, analyze, natconst    
+#from radmc3dPy.analyze import *  
+#from radmc3dPy.natconst import * 
 from astropy.wcs import WCS
 import sys
 #sys.path.append('../../SED_sgrb2/SED_fit')
@@ -39,11 +40,14 @@ class model_setup_lines:
         sigma = const.sigma_sb.value
         Lsun = const.L_sun.value
         Rsun = const.R_sun.value
+        Msun = const.M_sun.value
+        G = const.G.value
         #
         # Star parameters
         #
         radius_star = 13.4
-        self.mstar    = 30*(const.M_sun).to("g").value # in kg, check if correct units
+        mass_star = 30
+        self.mstar    = mass_star*(const.M_sun).to("g").value # in kg, check if correct units
         self.rstar    = radius_star*(const.R_sun).to("cm").value  # in m , check units
         self.tstar    = (lum*Lsun/(4*np.pi*sigma*(radius_star*Rsun)**2))**0.25 
         self.ls       = (const.L_sun).to("erg/s").value  #solar luminosity
@@ -81,12 +85,12 @@ class model_setup_lines:
         self.ri       = np.logspace(np.log10(self.ri),np.log10(self.ro), self.nr+1)
         self.thetai   = np.linspace(0, np.pi,self.ntheta+1)
         self.phii     = np.linspace(0, 2*np.pi,self.nphi+1)
-        rc       = 0.5e0 * ( self.ri[:-1] + self.ri[1:] )
+        self.rc       = 0.5e0 * ( self.ri[:-1] + self.ri[1:] )
         rdiff = np.diff(self.ri)
         rtheta       = 0.5e0 * ( self.thetai[:-1] + self.thetai[1:] )
         rphi       = 0.5e0 * ( self.phii[:-1] + self.phii[1:] )
 
-        self.rho0 = dens * 2.3 * mp
+        self.rho0 = dens * 2.3 * natconst.mp
         self.prho     = prho   
 
 
@@ -94,10 +98,10 @@ class model_setup_lines:
         # Make the dust density model
         #
         self.radius = radius * au
-        rr, tt, pp      = np.meshgrid(rc, rtheta, rphi,indexing='ij')
+        rr, tt, pp      = np.meshgrid(self.rc, rtheta, rphi,indexing='ij')
         self.rhod     = self.rho0 /(1.+rr**2/self.radius**2)**(self.prho/2)
-        densr = dens/(1.+rc**2/self.radius**2)**(self.prho/2)
-        print (self.rhod.shape, rr.shape)
+        densr = dens/(1.+self.rc**2/self.radius**2)**(self.prho/2)
+    #    print (self.rhod.shape, rr.shape)
 #        for i in range(rr.shape[0]):
 #            print (self.rhod[i], rr[i])
        #
@@ -112,7 +116,7 @@ class model_setup_lines:
         # Apply variations to the density
         self.rhod *= 10**gaussian_variations
 
-    def add_lines(self):
+    def add_lines(self, vin=0, Tlow=50, Thigh=1000, abunch3cn=1e-8):
         
         # Model parameters
         #
@@ -120,10 +124,15 @@ class model_setup_lines:
         vturb0   = 3.*1e5
 
         vturb   = np.zeros((self.nr,self.ntheta,self.nphi)) + vturb0
-
-        abunch3cn = 1e-8
-        factch3cn = abunch3cn/(2.3*mp)
+        data = analyze.readData(dtemp=True)
+        dt = data.dusttemp[:,:,:,0]
+        print (dt.shape)
+ 
+        factch3cn = abunch3cn/(2.3*natconst.mp)
         nch3cn    = self.rhod*factch3cn
+        nch3cn[dt>Thigh] = 0
+        nch3cn[dt<Tlow] = 0
+
         with open('numberdens_ch3cn.inp','w+') as f:
             f.write('1\n')                       # Format number
             f.write('%d\n'%(self.nr*self.ntheta*self.nphi))           # Nr of cells
@@ -136,10 +145,12 @@ class model_setup_lines:
         with open('gas_velocity.inp','w+') as f:
             f.write('1\n')                       # Format number
             f.write('%d\n'%(self.nr*self.ntheta*self.nphi))           # Nr of cells
-            for iz in range(self.nphi):
-                for iy in range(self.ntheta):
-                    for ix in range(self.nr):
-                        f.write('%13.6e %13.6e %13.6e\n'%(0,0,0))
+            for iphi in range(self.nphi):
+                for itheta in range(self.ntheta):
+                    for ir in range(self.nr):
+                        ri = self.rc[ir]
+                        vr = -vin*np.sqrt(2*const.G.cgs.value*self.mstar/ri)
+                        f.write('%13.6e %13.6e %13.6e\n'%(vr,0,0))
         #
         # Write the microturbulence file
         #
@@ -186,7 +197,7 @@ class model_setup_lines:
             f.write('100\n')                       # Coordinate system
             f.write('0\n')                       # gridinfo
             f.write('1 1 1\n')                   # Include x,y,z coordinate
-            f.write('%d %d %d\n'%(self.nr,self.ntheta,self.nphi))     # Size of grid
+            f.write('%d %d %d\n'%(self.nr,self.ntheta,self.nphi))     # Size of grid/usr/bin/time 
             for value in self.ri:
                 f.write('%13.6e\n'%(value))      # X coordinates (cell walls)
             for value in self.thetai:
@@ -232,9 +243,9 @@ class model_setup_lines:
     def calculate_model(self,ncores=None):
         t0 = time.time()
         if ncores is None:
-            os.system('radmc3d mctherm')
+            out = subprocess.run(["radmc3d",  "mctherm"], capture_output=True, text=True)
         else:
-            os.system('radmc3d mctherm setthreads '+str(ncores))
+            out = subprocess.run(['radmc3d', 'mctherm',  'setthreads',  f'{ncores}'], capture_output=True, text=True)
         #os.system('radmc3d sed')
         t1 = time.time()
 
@@ -243,11 +254,12 @@ class model_setup_lines:
         with open('cost.out','w+') as f:
             f.write(f'Calculating the model cost: {total}')
         #Make the necessary calls to run radmc3d
+        return out
 
     def make_vtk(self):
         os.system('radmc3d vtk_dust_temperature 1 vtk_dust_density 1')
    
-    def make_cube(self, lambda1 = 1358.0, lambda2=1359.5, nlam=300, ncores=20):
+    def make_cube(self, lambda1 = 1358.0, lambda2=1361.5, nlam=300, ncores=20):
         cmd = f'radmc3d image lambdarange {lambda1} {lambda2} nlam {nlam} setthreads {ncores}'
         os.system(cmd)
 
@@ -257,7 +269,7 @@ class model_setup_lines:
     
 
     def make_fits(self, filename):
-        im=readImage()
+        im=image.readImage()
         im.writeFits(filename)
         
     def sed(self):
@@ -283,7 +295,7 @@ class model_setup_lines:
         t0 = time.time()
         for wl in wls:
             os.system('radmc3d image lambda '+str(wl))
-            im   = readImage()
+            im   = image.readImage()
             im.writeFits('model'+str(wl)+'.fits')
             process_radmc_image('model'+str(wl)+'.fits','model'+str(wl)+'_smooth.fits',0.4,overwrite=True)
             cim = im.imConv(fwhm=[0.4, 0.4], pa=0., dpc=8340.) 
@@ -299,7 +311,7 @@ class model_setup_lines:
     def make_tau_surface(self,wls):
         for wl in wls:
             os.system("radmc3d tausurf 1.0 lambda "+str(wl))
-            im   = readImage()
+            im   = image.readImage()
             data = np.squeeze(im.image[:, ::-1, 0].T)
             #plotImage(im,arcsec=True,dpc=8340.)
             im.writeFits('tau_surf_'+str(wl)+'.fits')
@@ -310,7 +322,7 @@ class model_setup_lines:
     def make_tau_map(self,wls):
         for wl in wls:
             os.system("radmc3d image lambda "+str(wl)+" tracetau")
-            im   = readImage()
+            im   = image.readImage()
             data = np.squeeze(im.image[:, ::-1, 0].T)
             #plotImage(im,arcsec=True,dpc=8340.)
             im.writeFits('tau'+str(wl)+'.fits')
@@ -321,7 +333,7 @@ class model_setup_lines:
     def make_column_density_map(self,wls):
         for wl in wls:
             os.system("radmc3d image lambda "+str(wl)+" tracecolumn")
-            im   = readImage()
+            im   = image.readImage()
             data = np.squeeze(im.image[:, ::-1, 0].T)
             #plotImage(im,arcsec=True,dpc=8340.)
             im.writeFits('column_density_'+str(wl)+'.fits')
@@ -450,7 +462,7 @@ def extract_dimensions(array):
     
 
 def read_image():
-    im = readImage()
+    im = image.readImage()
     #data = np.squeeze(im.image[:, ::-1, 0].T)
     data = im.image
 
