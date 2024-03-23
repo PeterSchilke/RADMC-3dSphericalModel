@@ -45,7 +45,7 @@ class model_setup_lines:
         #
         # Star parameters
         #
-        radius_star = 13.4
+        radius_star = 134.
         mass_star = 30
         self.mstar    = mass_star*(const.M_sun).to("g").value # in kg, check if correct units
         self.rstar    = radius_star*(const.R_sun).to("cm").value  # in m , check units
@@ -98,8 +98,8 @@ class model_setup_lines:
         # Make the dust density model
         #
         self.radius = radius * au
-        rr, tt, pp      = np.meshgrid(self.rc, rtheta, rphi,indexing='ij')
-        self.rhod     = self.rho0 /(1.+rr**2/self.radius**2)**(self.prho/2)
+        self.rr, self.tt, self.pp      = np.meshgrid(self.rc, rtheta, rphi,indexing='ij')
+        self.rhod     = self.rho0 /(1.+self.rr**2/self.radius**2)**(self.prho/2)
         densr = dens/(1.+self.rc**2/self.radius**2)**(self.prho/2)
     #    print (self.rhod.shape, rr.shape)
 #        for i in range(rr.shape[0]):
@@ -109,12 +109,15 @@ class model_setup_lines:
         cold = rdiff*densr
         print (f'total column density {cold.sum(): 5.2e}')
    
-    def add_gaussian_variations(self, std_deviation):
+    def add_gaussian_variations(self, r_dev, phi_dev):
         # Generate Gaussian variations for each voxel
-        gaussian_variations = np.random.normal(0, std_deviation, size=(self.nr, self.ntheta, self.nphi))
+        r_variations = np.random.normal(0, r_dev, size=(self.nr, self.ntheta, self.nphi)) 
+        phi_variations = phi_dev*np.sin(self.pp/2.)
+     #   print(np.cos(self.pp))
+     #   print (np.max(phi_variations), np.min(phi_variations))
 
         # Apply variations to the density
-        self.rhod *= 10**gaussian_variations
+        self.rhod *= 10**r_variations * 10**phi_variations
 
     def add_lines(self, vin=0, Tlow=50, Thigh=1000, abunch3cn=1e-8):
         
@@ -259,15 +262,15 @@ class model_setup_lines:
     def make_vtk(self):
         os.system('radmc3d vtk_dust_temperature 1 vtk_dust_density 1')
    
-    def make_cube(self, lambda1 = 1358.0, lambda2=1361.5, nlam=300, ncores=20):
-        cmd = f'radmc3d image lambdarange {lambda1} {lambda2} nlam {nlam} setthreads {ncores}'
+    def make_cube(self, lambda1 = 1358.0, lambda2=1361.5, incl=0, phi=0, nlam=300, ncores=20):
+        cmd = f'radmc3d image lambdarange {lambda1} {lambda2} nlam {nlam} incl {incl} phi {phi} setthreads {ncores}'
         os.system(cmd)
 
     def make_circular_image(self, wavel=10):
         cmd = f'radmc3d image circ lambda {wavel}'
         os.system(cmd)
     
-
+    
     def make_fits(self, filename):
         im=image.readImage()
         im.writeFits(filename)
