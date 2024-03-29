@@ -4,6 +4,7 @@
 import astropy.constants as const
 import astropy.units as u
 import numpy as np
+from scipy.integrate import tplquad, quad
 import math
 import os
 import subprocess
@@ -30,12 +31,14 @@ import sys
 class model_setup_lines:
     def __init__(self,dens,prho,ri=50,ro=5000,nphot=100000,radius=3000,nradial=100,lum=1e4):
 
-        au=(const.au).to("cm").value
+        au=const.au.cgs.value
+        m_r = 2.3*const.m_p.cgs.value
+
 
         self.nphot=nphot
 
-        self.ri = ri * au
-        self.ro = ro * au
+        self.r_i = ri * au
+        self.r_o = ro * au
  
         sigma = const.sigma_sb.value
         Lsun = const.L_sun.value
@@ -45,7 +48,7 @@ class model_setup_lines:
         #
         # Star parameters
         #
-        radius_star = 134.
+        radius_star = 13.4
         mass_star = 30
         self.mstar    = mass_star*(const.M_sun).to("g").value # in kg, check if correct units
         self.rstar    = radius_star*(const.R_sun).to("cm").value  # in m , check units
@@ -82,7 +85,7 @@ class model_setup_lines:
 
         #
   
-        self.ri       = np.logspace(np.log10(self.ri),np.log10(self.ro), self.nr+1)
+        self.ri = np.logspace(np.log10(self.r_i),np.log10(self.r_o), self.nr+1)
         self.thetai   = np.linspace(0, np.pi,self.ntheta+1)
         self.phii     = np.linspace(0, 2*np.pi,self.nphi+1)
         self.rc       = 0.5e0 * ( self.ri[:-1] + self.ri[1:] )
@@ -90,7 +93,7 @@ class model_setup_lines:
         rtheta       = 0.5e0 * ( self.thetai[:-1] + self.thetai[1:] )
         rphi       = 0.5e0 * ( self.phii[:-1] + self.phii[1:] )
 
-        self.rho0 = dens * 2.3 * natconst.mp
+        self.rho0 = dens * m_r
         self.prho     = prho   
 
 
@@ -106,13 +109,17 @@ class model_setup_lines:
 #            print (self.rhod[i], rr[i])
        #
         # Make the dust density model in the layer
-        cold = rdiff*densr
-        print (f'total column density {cold.sum(): 5.2e}')
+        cold = quad(lambda r: dens/(1.+r**2/self.radius**2)**(self.prho/2.), self.r_i, self.r_o)
+        print (f'total column density {cold[0]: 5.2e} [cm-2]')
+
+        mass = tplquad(lambda phi, theta, r: self.rho0/(1.+r**2/self.radius**2)**(self.prho/2.) * r**2 * np.sin(theta), 
+                       self.r_i, self.r_o, lambda theta: 0, lambda theta: np.pi, lambda theta, phi: 0, lambda theta, phi: 2*np.pi)
+        print (f'total mass (spherical, no disturbance) {mass[0]/Msun: 5.2e} [M_sun]')
    
     def add_gaussian_variations(self, r_dev, phi_dev):
         # Generate Gaussian variations for each voxel
         r_variations = np.random.normal(0, r_dev, size=(self.nr, self.ntheta, self.nphi)) 
-        phi_variations = phi_dev*np.sin(self.pp/2.)
+        phi_variations = phi_dev*np.sin(self.pp)
      #   print(np.cos(self.pp))
      #   print (np.max(phi_variations), np.min(phi_variations))
 
@@ -253,9 +260,9 @@ class model_setup_lines:
         t1 = time.time()
 
         total = t1-t0
-        print(f'Calculating the model cost: {total}')
+        print(f'Calculating the model cost: {total}\n')
         with open('cost.out','w+') as f:
-            f.write(f'Calculating the model cost: {total}')
+            f.write(f'Calculating the model cost: {total}\n')
         #Make the necessary calls to run radmc3d
         return out
 
@@ -263,8 +270,14 @@ class model_setup_lines:
         os.system('radmc3d vtk_dust_temperature 1 vtk_dust_density 1')
    
     def make_cube(self, lambda1 = 1358.0, lambda2=1361.5, incl=0, phi=0, nlam=300, ncores=20):
+        t0 = time.time()
         cmd = f'radmc3d image lambdarange {lambda1} {lambda2} nlam {nlam} incl {incl} phi {phi} setthreads {ncores}'
         os.system(cmd)
+        t1 = time.time()
+        total=t1-t0
+        print("Calculating the cubes cost: "+str(total)+" s")
+        with open('cost.out','a+') as f:
+            f.write(f'Calculating the cube cost: {total}\n')
 
     def make_circular_image(self, wavel=10):
         cmd = f'radmc3d image circ lambda {wavel}'
