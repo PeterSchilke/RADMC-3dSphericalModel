@@ -291,7 +291,7 @@ class model_setup_lines:
     def sed(self):
         #plot sed
         os.system('radmc3d sed')
-        s    = readSpectrum()
+        s    = analyze.readSpectrum()
         plt.figure()
         lammic = s[:,0]
         flux   = s[:,1]
@@ -362,7 +362,7 @@ class model_setup_lines:
     def density_profile(self):
         #plot density vs radius
         au=const.au.cgs.value # AU [cm]
-        a    = readData(ddens=True,binary=False)
+        a    = analyze.readData(ddens=True,binary=False)
         r    = a.grid.x[:]
         density = a.rhodust[:,0,0,0]
         plt.figure(1)

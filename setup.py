@@ -3,8 +3,7 @@ import astropy.constants as const
 import os
 import sys
 
-sdens = "1e9"
-dens = float(sdens)
+dens = 1e9
 lum = 1e4
 ri = 50
 ro = 2000
@@ -15,7 +14,7 @@ vin=1 # scaling factor for infall
 # step function for abundance of molecule
 Tlow = 50
 Thigh = 800
-abunch3cn=1e-8
+abunch3cn=1e-7
 wls=[1360, 870, 450, 350]
 
 prho=2.0 #power law index
@@ -33,6 +32,8 @@ test.write_input(mrw=mrw)
 try:
     dir = f'Dens={dens:5.2e}_Lum={lum:5.2e}_ri={ri}_ro={ro}_radius={radius}_prho={prho}_nradial={nradial}_nlam={nlam}_vin={vin}_MRW={mrw}_Tlow={Tlow}_Thigh={Thigh}_NCH3CN={abunch3cn}_rvar={r_dev}_phivar={phi_dev}'
     out = test.calculate_model(ncores=20)
+    test.make_vtk()
+
     print (f'stdout: {out.stdout}')
     print (f'stderr: {out.stderr}')
     with open(f'{dir}.log', 'w') as logfile:
@@ -52,7 +53,6 @@ except Exception as e:
 
 try:
     test.add_lines(vin=vin, Tlow=Tlow, Thigh=Thigh, abunch3cn=abunch3cn)
-    test.make_vtk()
  
     incl = 0
     phi = 0
