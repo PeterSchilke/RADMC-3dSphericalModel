@@ -2,13 +2,14 @@ from model_setup_lines import model_setup_lines as model
 import astropy.constants as const
 import os
 import sys
+from multiprocessing import Pool
 
-dens = 1e9
+dens = 1e5
 lum = 1e4
 ri = 50
-ro = 2000
-radius = 100
-nradial=100
+ro = 10000
+radius = 200
+nradial=20
 nlam=2000
 vin=1 # scaling factor for infall
 # step function for abundance of molecule
@@ -16,6 +17,7 @@ Tlow = 50
 Thigh = 800
 abunch3cn=1e-7
 wls=[1360, 870, 450, 350]
+ncores = 16
 
 prho=2.0 #power law index
 test=model(dens,prho,ri=ri,ro=ro,nphot=100000,radius=radius,nradial=nradial,lum=lum)
@@ -24,14 +26,14 @@ phi_dev = 0.1
 test.add_gaussian_variations(r_dev, phi_dev)
 
 #write input file
-mrw=False
+mrw=True
 
 
 test.write_input(mrw=mrw)
 #run model
 try:
     dir = f'Dens={dens:5.2e}_Lum={lum:5.2e}_ri={ri}_ro={ro}_radius={radius}_prho={prho}_nradial={nradial}_nlam={nlam}_vin={vin}_MRW={mrw}_Tlow={Tlow}_Thigh={Thigh}_NCH3CN={abunch3cn}_rvar={r_dev}_phivar={phi_dev}'
-    out = test.calculate_model(ncores=20)
+    out = test.calculate_model(ncores=ncores)
     test.make_vtk()
 
     print (f'stdout: {out.stdout}')
@@ -54,29 +56,25 @@ except Exception as e:
 try:
     test.add_lines(vin=vin, Tlow=Tlow, Thigh=Thigh, abunch3cn=abunch3cn)
  
-    incl = 0
-    phi = 0
-    test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=20)
-    fitsfile = f'{dir}_incl={incl}_phi={phi}.fits'
-    test.make_fits(fitsfile)
+    argument = []
 
-    incl = 0
-    phi = 90
-    test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=20)
-    fitsfile = f'{dir}_incl={incl}_phi={phi}.fits'
-    test.make_fits(fitsfile)
-
-    incl = 90
-    phi = 0
-    test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=20)
-    fitsfile = f'{dir}_incl={incl}_phi={phi}.fits'
-    test.make_fits(fitsfile)
-
-    incl = 90
-    phi = 90
-    test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=20)
-    fitsfile = f'{dir}_incl={incl}_phi={phi}.fits'
-    test.make_fits(fitsfile)
+    def make_cube(argument):
+        nlam = argument[0]
+        incl = argument[1]
+        phi = argument[2] 
+        ncores = argument[3]        
+        dir = argument[4]
+        test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=ncores)
+        fitsfile = f'{dir}_incl={i}_phi={j}.fits'
+        test.make_fits(fitsfile)
+    
+    for incl in [0, 90]:    
+        for phi in [0, 90]:
+            argument.append([nlam, incl, phi, ncores, dir])
+            
+    with Pool() as pool:
+        result = pool.map(make_cube, argument)
+  
 
 
 #   these functions take some time and could benefit from multithreading too.
