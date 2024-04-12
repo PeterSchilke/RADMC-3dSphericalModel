@@ -4,12 +4,12 @@ import os
 import sys
 from multiprocessing import Pool
 
-dens = 1e5
+dens = 1e9
 lum = 1e4
 ri = 50
 ro = 10000
 radius = 200
-nradial=20
+nradial = 20
 nlam=2000
 vin=1 # scaling factor for infall
 # step function for abundance of molecule
@@ -21,12 +21,12 @@ ncores = 16
 
 prho=2.0 #power law index
 test=model(dens,prho,ri=ri,ro=ro,nphot=100000,radius=radius,nradial=nradial,lum=lum)
-r_dev = 0.0
-phi_dev = 0.1
+r_dev = 0.3
+phi_dev = 0.3
 test.add_gaussian_variations(r_dev, phi_dev)
 
 #write input file
-mrw=True
+mrw=False
 
 
 test.write_input(mrw=mrw)
@@ -65,28 +65,31 @@ try:
         ncores = argument[3]        
         dir = argument[4]
         test.make_cube(nlam=nlam, incl = incl, phi = phi, ncores=ncores)
-        fitsfile = f'{dir}_incl={i}_phi={j}.fits'
+        fitsfile = f'{dir}_incl={incl}_phi={phi}.fits'
         test.make_fits(fitsfile)
+        cmd = f'mv image.out {dir}_incl={incl}_phi={phi}.out'
+        os.system(cmd)
     
-    for incl in [0, 90]:    
-        for phi in [0, 90]:
+    for incl in [0, 45, 90]:    
+        for phi in [0, 45, 90]:
             argument.append([nlam, incl, phi, ncores, dir])
             
     with Pool() as pool:
-        result = pool.map(make_cube, argument)
+        result = pool.map_async(make_cube, argument)
+        result.wait()
   
 
 
 #   these functions take some time and could benefit from multithreading too.
 #   test.make_synth_maps(wls)
 #    test.make_tau_surface(wls)
-
-    with open(f'{dir}.log', 'a+') as logfile:
-        logfile.write(f'stdout:\n {out.stdout}')
-        logfile.write(f'stderr:\n {out.stderr}')
- 
     cmd = f'mkdir {dir}; cp *.inp  *.out {dir}; mv *.fits *log *vtk *dat {dir}'
     os.system(cmd)
+#    with open(f'{dir}.log', 'a+') as logfile:
+#        logfile.write(f'stdout:\n {out.stdout}')
+#        logfile.write(f'stderr:\n {out.stderr}')
+ 
+    
 except Exception as e:
     print (e)
     sys.exit(1)

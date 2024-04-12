@@ -40,23 +40,22 @@ class model_setup_lines:
         self.r_i = ri * au
         self.r_o = ro * au
  
-        sigma = const.sigma_sb.value
-        Lsun = const.L_sun.value
-        Rsun = const.R_sun.value
-        Msun = const.M_sun.value
+        sigma = const.sigma_sb.cgs.value
+        self.Lsun = const.L_sun.cgs.value
+        Rsun = const.R_sun.cgs.value
+        Msun = const.M_sun.cgs.value
         G = const.G.value
         #
         # Star parameters
         #
         radius_star = 13.4
         mass_star = 30
-        self.mstar    = mass_star*(const.M_sun).to("g").value # in kg, check if correct units
-        self.rstar    = radius_star*(const.R_sun).to("cm").value  # in m , check units
-        self.tstar    = (lum*Lsun/(4*np.pi*sigma*(radius_star*Rsun)**2))**0.25 
-        self.ls       = (const.L_sun).to("erg/s").value  #solar luminosity
+        self.mstar    = mass_star*Msun # in g
+        self.rstar    = radius_star*Rsun  # in cm
+        self.tstar    = (lum*self.Lsun/(4*np.pi*sigma*(radius_star*Rsun)**2))**0.25 
         self.pstar    = np.array([0.,0.,0.]) #position in cartesian coords
         #
-        Lum = sigma*4*np.pi*(radius_star*Rsun)**2*self.tstar**4/Lsun 
+        Lum = sigma*4*np.pi*(radius_star*Rsun)**2*self.tstar**4/self.Lsun 
 
         print (f'Luminosity: {Lum:5.2e}, Temperature: {self.tstar:5f}' )
         # Wavelengths - this eventually needs a function to calculate it based of start and endpoint and maybe number of intervals.
@@ -79,8 +78,8 @@ class model_setup_lines:
 
         # grid parameters - eventually replace this with a function or put as argument.
         self.nr = nradial  # 
-        self.ntheta = 90  # 
-        self.nphi = 180  # 
+        self.ntheta = 30  # 
+        self.nphi = 60  # 
         #
 
         #
@@ -298,7 +297,7 @@ class model_setup_lines:
         nu     = 1e4*const.c.cgs/lammic
         nufnu  = nu*flux
         nulnu  = nufnu*4*math.pi*(const.pc.cgs)*(const.pc.cgs)
-        plt.plot(lammic,nulnu/self.ls)
+        plt.plot(lammic,nulnu/self.Lsun)
         plt.xscale('log')
         plt.yscale('log')
         plt.xlabel(r'$\lambda$ [$\mu$m]')
